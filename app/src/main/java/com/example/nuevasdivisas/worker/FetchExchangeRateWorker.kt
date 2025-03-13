@@ -2,69 +2,51 @@ package com.example.nuevasdivisas.worker
 
 import android.content.Context
 import android.util.Log
-import androidx.work.*
+import androidx.work.Worker
+import androidx.work.WorkerParameters
 import com.example.nuevasdivisas.data.AppDatabase
 import com.example.nuevasdivisas.data.ExchangeRate
 import com.example.nuevasdivisas.network.RetrofitClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.runBlocking
 
-class FetchExchangeRateWorker(
-    context: Context,
-    workerParams: WorkerParameters
-) : CoroutineWorker(context, workerParams) {
+class FetchExchangeRateWorker(context: Context, workerParams: WorkerParameters) :
+    Worker(context, workerParams) {
 
-    override suspend fun doWork(): Result {
-        Log.d("WORKER_STATUS", "Ejecutando FetchExchangeRateWorker...")
+    override fun doWork(): Result {
+        Log.d("FetchExchangeRateWorker", "🚀 Iniciando actualización de tasas de cambio")
 
-        val db = AppDatabase.getDatabase(applicationContext)
-        val dao = db.exchangeRateDao()
+        val database = AppDatabase.getInstance(applicationContext)
+        val exchangeRateDao = database.exchangeRateDao()
 
         return try {
-            val response = RetrofitClient.api.getExchangeRates()
-            Log.d("API_RESPONSE", "Código HTTP: ${response.code()}")
+            // Usamos runBlocking para ejecutar la función suspendida dentro de WorkManager
+            runBlocking {
+                val response = RetrofitClient.api.getExchangeRates()
 
-            if (response.isSuccessful) {
-                val data = response.body()
-                Log.d("API_RESPONSE", "Respuesta de la API: $data")
+                if (response.isSuccessful) {
+                    val apiResponse = response.body()
 
-                if (data?.rates != null) { // ✅ Verifica que `data` y `rates` no sean nulos
-                    withContext(Dispatchers.IO) {
-                        val dateValue = data.date ?: "Fecha no disponible" // ✅ Evita valores nulos
-                        data.rates.entries.forEach { (currency, rate) ->
-                            dao.insert(ExchangeRate(currency = currency, rate = rate, date = dateValue))
+                    if (apiResponse?.rates != null) {
+                        Log.d("FetchExchangeRateWorker", "📥 Datos obtenidos de la API")
+
+                        val exchangeRates = apiResponse.rates.map { (currency, rate) ->
+                            ExchangeRate(currency = currency, rate = rate, date = apiResponse.date ?: "")
                         }
+
+                        exchangeRateDao.insertAll(exchangeRates)
+                        Log.d("FetchExchangeRateWorker", "✅ ${exchangeRates.size} tasas guardadas en la DB")
+                    } else {
+                        Log.w("FetchExchangeRateWorker", "⚠️ Respuesta de API vacía")
                     }
-                    Log.d("WORKER_STATUS", "Datos insertados en Room correctamente.")
-                    Result.success()
                 } else {
-                    Log.e("WORKER_ERROR", "La respuesta de la API no contiene tasas de cambio.")
-                    Result.retry()
+                    Log.e("FetchExchangeRateWorker", "❌ Error en la API: ${response.code()}")
                 }
-            } else {
-                Log.e("WORKER_ERROR", "Error en la respuesta de la API: Código ${response.code()}")
-                Result.retry()
             }
+
+            Result.success()
         } catch (e: Exception) {
-            Log.e("WORKER_ERROR", "Excepción en FetchExchangeRateWorker", e)
-            Result.retry()
+            Log.e("FetchExchangeRateWorker", "🚨 Error en la descarga de datos: ${e.message}")
+            Result.failure()
         }
     }
-}
-
-// ✅ Función para programar el `Worker` cada hora
-fun scheduleWork(context: Context) {
-    val workManager = WorkManager.getInstance(context)
-    val request = PeriodicWorkRequestBuilder<FetchExchangeRateWorker>(1, TimeUnit.HOURS)
-        .setConstraints(
-            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        )
-        .build()
-
-    workManager.enqueueUniquePeriodicWork(
-        "FetchExchangeRateWorker",
-        ExistingPeriodicWorkPolicy.KEEP,
-        request
-    )
 }

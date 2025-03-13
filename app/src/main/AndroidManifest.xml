@@ -5,7 +5,10 @@
 
     <!-- ✅ Permisos necesarios -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> <!-- 🔥 Opcional, pero útil para WorkManager -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <permission android:name="com.example.nuevasdivisas.READ_PROVIDER"
+        android:protectionLevel="signature"/>
+
 
     <application
         android:allowBackup="true"
@@ -17,7 +20,6 @@
         android:theme="@style/Theme.NuevasDivisas"
         tools:targetApi="31">
 
-        <!-- ✅ Asegurar que MainActivity está correctamente configurada -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -29,6 +31,15 @@
             </intent-filter>
         </activity>
 
-    </application>
+        <!-- ✅ ContentProvider correctamente configurado -->
+        <provider
+            android:name=".provider.ExchangeRateProvider"
+            android:authorities="com.example.nuevasdivisas.provider"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:readPermission="com.example.nuevasdivisas.READ_PROVIDER"/>
 
+
+
+    </application>
 </manifest>

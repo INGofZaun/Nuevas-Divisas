@@ -9,86 +9,71 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.work.*
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.nuevasdivisas.data.AppDatabase
 import com.example.nuevasdivisas.data.ExchangeRate
 import com.example.nuevasdivisas.worker.FetchExchangeRateWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.d("MAIN_ACTIVITY", "Iniciando MainActivity...")
-
-        // ✅ Programar WorkManager al iniciar la aplicación
-        scheduleWorkManager()
-
-        // ✅ Ejecutar inmediatamente el worker para pruebas
-        val workManager = WorkManager.getInstance(this)
-        val request = OneTimeWorkRequestBuilder<FetchExchangeRateWorker>().build()
-        workManager.enqueue(request)
-
-        Log.d("MAIN_ACTIVITY", "Worker programado y ejecutado una vez manualmente.")
-
         setContent {
-            ExchangeRateListScreen()
+            var rates by remember { mutableStateOf(emptyList<ExchangeRate>()) }
+
+            LaunchedEffect(Unit) {
+                cargarDatos { rates = it }
+            }
+
+            MostrarTasasDeCambio(rates)
         }
+
+        // 🔥 **Ejecutar el Worker manualmente al iniciar la app**
+        Log.d("MainActivity", "🚀 Ejecutando Worker para actualizar tasas")
+        val workRequest = OneTimeWorkRequestBuilder<FetchExchangeRateWorker>().build()
+        WorkManager.getInstance(this).enqueue(workRequest)
     }
 
-    // ✅ Función para programar WorkManager cada hora
-    private fun scheduleWorkManager() {
-        val workManager = WorkManager.getInstance(this)
-        val request = PeriodicWorkRequestBuilder<FetchExchangeRateWorker>(1, TimeUnit.HOURS)
-            .setConstraints(
-                Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-            )
-            .build()
+    private fun cargarDatos(callback: (List<ExchangeRate>) -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val exchangeRateDao = AppDatabase.getInstance(applicationContext).exchangeRateDao()
+            val rates = exchangeRateDao.getAllRatesForProvider()
 
-        workManager.enqueueUniquePeriodicWork(
-            "FetchExchangeRateWorker",
-            ExistingPeriodicWorkPolicy.KEEP,
-            request
-        )
-        Log.d("MAIN_ACTIVITY", "WorkManager programado para cada hora.")
+            Log.d("MainActivity", "📊 Datos obtenidos de la DB: ${rates.size} registros")
+
+            withContext(Dispatchers.Main) {
+                callback(rates)
+            }
+        }
     }
 }
 
 @Composable
-fun ExchangeRateListScreen() {
-    val context = LocalContext.current
-    val db = AppDatabase.getDatabase(context)
-    val rates = remember { mutableStateListOf<ExchangeRate>() }
+fun MostrarTasasDeCambio(rates: List<ExchangeRate>) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text(text = "Tasas de Cambio", style = MaterialTheme.typography.headlineMedium)
 
-    LaunchedEffect(Unit) {
-        db.exchangeRateDao().getAllRates().collect { newRates ->
-            rates.clear()
-            rates.addAll(newRates)
-            Log.d("ROOM_DB", "Datos recibidos de Room: $newRates")
-        }
-    }
+        Spacer(modifier = Modifier.height(8.dp))
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        if (rates.isEmpty()) {
-            // ✅ Mostrar mensaje si la lista está vacía
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Cargando datos...", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                items(rates) { rate ->
-                    Text(text = "${rate.currency}: ${rate.rate}", modifier = Modifier.padding(8.dp))
+        LazyColumn {
+            items(rates) { rate ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = "Moneda: ${rate.currency}")
+                        Text(text = "Tasa: ${rate.rate}")
+                        Text(text = "Fecha: ${rate.date}")
+                    }
                 }
             }
         }
