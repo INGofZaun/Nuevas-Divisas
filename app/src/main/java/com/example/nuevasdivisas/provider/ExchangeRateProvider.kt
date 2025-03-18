@@ -55,12 +55,14 @@ class ExchangeRateProvider : ContentProvider() {
                 CODE_ALL_EXCHANGE_RATES -> {
                     Log.d("ExchangeRateProvider", "📡 Consultando todas las tasas de cambio")
                     val rates = exchangeRateDao.getAllRatesForProvider()
+                    Log.d("ExchangeRateProvider", "📄 Datos obtenidos del ContentProvider: $rates")
                     convertToCursor(rates)
                 }
                 CODE_SINGLE_EXCHANGE_RATE -> {
                     val currency = uri.lastPathSegment ?: return null
                     Log.d("ExchangeRateProvider", "📡 Consultando tasas para: $currency")
                     val rates = exchangeRateDao.getRatesForProvider(currency)
+                    Log.d("ExchangeRateProvider", "📄 Datos obtenidos del ContentProvider para $currency: $rates")
                     convertToCursor(rates)
                 }
                 else -> {
@@ -73,6 +75,7 @@ class ExchangeRateProvider : ContentProvider() {
             null
         }
     }
+
 
 
 

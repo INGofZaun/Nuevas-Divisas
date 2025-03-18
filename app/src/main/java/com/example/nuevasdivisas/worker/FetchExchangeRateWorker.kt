@@ -19,19 +19,20 @@ class FetchExchangeRateWorker(context: Context, workerParams: WorkerParameters) 
         val exchangeRateDao = database.exchangeRateDao()
 
         return try {
-            // Usamos runBlocking para ejecutar la función suspendida dentro de WorkManager
             runBlocking {
                 val response = RetrofitClient.api.getExchangeRates()
+                Log.d("FetchExchangeRateWorker", "📡 Respuesta de API recibida: $response")
 
                 if (response.isSuccessful) {
                     val apiResponse = response.body()
+                    Log.d("FetchExchangeRateWorker", "🌍 Datos de API: ${apiResponse?.rates}")
 
                     if (apiResponse?.rates != null) {
-                        Log.d("FetchExchangeRateWorker", "📥 Datos obtenidos de la API")
-
                         val exchangeRates = apiResponse.rates.map { (currency, rate) ->
                             ExchangeRate(currency = currency, rate = rate, date = apiResponse.date ?: "")
                         }
+
+                        Log.d("FetchExchangeRateWorker", "📦 Datos procesados: $exchangeRates")
 
                         exchangeRateDao.insertAll(exchangeRates)
                         Log.d("FetchExchangeRateWorker", "✅ ${exchangeRates.size} tasas guardadas en la DB")
@@ -39,7 +40,7 @@ class FetchExchangeRateWorker(context: Context, workerParams: WorkerParameters) 
                         Log.w("FetchExchangeRateWorker", "⚠️ Respuesta de API vacía")
                     }
                 } else {
-                    Log.e("FetchExchangeRateWorker", "❌ Error en la API: ${response.code()}")
+                    Log.e("FetchExchangeRateWorker", "❌ Error en la API: ${response.code()} - ${response.message()}")
                 }
             }
 
@@ -49,4 +50,5 @@ class FetchExchangeRateWorker(context: Context, workerParams: WorkerParameters) 
             Result.failure()
         }
     }
+
 }

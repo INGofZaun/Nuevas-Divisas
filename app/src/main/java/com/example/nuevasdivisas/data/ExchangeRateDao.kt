@@ -1,16 +1,19 @@
 package com.example.nuevasdivisas.data
 
 import android.database.Cursor
+import android.util.Log
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ExchangeRateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(rate: ExchangeRate): Long
-
+    suspend fun insert(rate: ExchangeRate): Long {
+        Log.d("ExchangeRateDao", "📥 Insertando tasa: $rate")
+        return insert(rate)
+    }
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(rates: List<ExchangeRate>): List<Long>
+    suspend fun insertAll(rates: List<ExchangeRate>)  // Eliminamos el cuerpo incorrecto que llama a sí mismo
 
     @Query("SELECT * FROM exchange_rates ORDER BY date DESC")
     fun getAllRates(): Flow<List<ExchangeRate>>
